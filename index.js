@@ -2,6 +2,7 @@ const axios = require("axios");
 const TurndownService = require("turndown");
 const mongoose = require("mongoose");
 const express = require("express");
+const cron = require("node-cron");
 
 const app = express();
 
@@ -15,6 +16,15 @@ const DB = process.env.DATABASE.replace(
 mongoose.connect(DB, {
   serverSelectionTimeoutMS: 5000,
 });
+
+function addFriggingToConcepts(sentence) {
+  // Regular expression to find determiners (e.g., "the", "a", "an")
+  const determinerRegex = /\b(a|an|the)\b/gi;
+  
+  sentence = sentence.replace(determinerRegex, "$& frigging");
+
+  return sentence;
+}
 
 const articleSchema = new mongoose.Schema({
   title: String,
@@ -32,44 +42,70 @@ async function fetchAndStoreFeaturedArticlesForDate(date) {
 
     const response = await axios.get(apiUrl);
     const articlesData = response.data;
+    // console.log(articlesData)
 
     const featuredArticlesObj = articlesData;
+
     for (const articles in featuredArticlesObj) {
       const articleData = featuredArticlesObj[articles];
+      // console.log(articles);
+      if (articles === 'tfa'){
+        const title = articleData.title;
+        // console.log(title);
 
-      const title = articleData.title;
-      console.log(title);
+        const extract = articleData.extract || "";
 
-      const extract = articleData.extract || "";
+        const paragraphs = extract.split("\n");
+        const firstParagraph = paragraphs[0];
+        // console.log(firstParagraph);
 
-      const paragraphs = extract.split("\n");
-      const firstParagraph = paragraphs[0];
-      console.log(firstParagraph);
+        const modifiedContent = addFriggingToConcepts(firstParagraph);
+        console.log(modifiedContent)
 
-      const turndownService = new TurndownService();
-      let plainTextContent = turndownService.turndown(firstParagraph);
+        const newArticle = new Article({
+          title: title,
+          content: modifiedContent,
+          dateAccessed: new Date(),
+        });
 
-      const punctuationRegex = /\b(\w+)\b/g;
-      const phrases = plainTextContent.split(punctuationRegex).filter(Boolean);
+        await saveArticleToDatabase(newArticle);
 
-      let modifiedContent = phrases.map((phrase) => {
-        if (/\b(\w+)\b/g.test(phrase)) {
-        return "frigging " + phrase;
-        } else {
-        return phrase;
+        console.log("Article saved:", title);
+
+        
+      }
+      if (articles === 'mostread') {
+        x= articleData["articles"].length
+        y= articleData["articles"]
+        console.log(x)
+        // console.log(y)
+        for (let i = 0; i < x; i++) {
+          const title = y[i].title;
+          console.log(title);
+
+          const extract = y[i].extract || "";
+          console.log(extract)
+
+          const paragraphs = extract.split("\n");
+          const firstParagraph = paragraphs[0];
+          // console.log(firstParagraph);
+
+          const modifiedContent = addFriggingToConcepts(firstParagraph);
+          console.log(modifiedContent)
+
+          const newArticle = new Article({
+            title: title,
+            content: modifiedContent,
+            dateAccessed: new Date(),
+          });
+
+          await saveArticleToDatabase(newArticle);
+
+          console.log("Article saved:", title);
+
         }
-    }).join(' ');
-      console.log(modifiedContent)
+      }
 
-      const newArticle = new Article({
-        title: title,
-        content: modifiedContent,
-        dateAccessed: new Date(),
-      });
-
-      await saveArticleToDatabase(newArticle);
-
-      console.log("Article saved:", title);
     }
   } catch (error) {
     console.error("Error fetching and storing articles:", error);
@@ -85,10 +121,10 @@ async function saveArticleToDatabase(newArticle) {
 }
 
 // Schedule the task to run once a day, e.g., at midnight
-// cron.schedule('0 0 * * *', () => {
-const today = new Date();
-fetchAndStoreFeaturedArticlesForDate(today);
-// });
+cron.schedule('0 0 * * *', () => {
+  const today = new Date();
+  fetchAndStoreFeaturedArticlesForDate(today);
+});
 
 app.get("/articles", async (req, res) => {
   try {
